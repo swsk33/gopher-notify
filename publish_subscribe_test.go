@@ -3,6 +3,7 @@ package gopher_notify
 import (
 	"fmt"
 	"testing"
+	"time"
 )
 
 // 实现订阅者接口
@@ -29,6 +30,7 @@ func TestPublish_Subscribe(t *testing.T) {
 	broker.Subscribe("topic-1", s1)
 	broker.Subscribe("topic-2", s2)
 	// 5.发布者发布事件
-	publisher.Publish(NewEvent(topicOne, "aaa"))
-	publisher.Publish(NewEvent(topicTwo, "bbb"))
+	publisher.Publish(NewEvent(topicOne, "aaa"), true)
+	publisher.Publish(NewEvent(topicTwo, "bbb"), true)
+	time.Sleep(100 * time.Millisecond)
 }

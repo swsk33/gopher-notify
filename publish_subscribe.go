@@ -65,11 +65,9 @@ type Subscriber[T comparable, D any] interface {
 //   - D 处理的事件包含的内容类型
 type Broker[T comparable, D any] struct {
 	// 全部订阅者列表，其中：
-	//  - 键：订阅的主题
-	//  - 值：对应主题的全部订阅者集合
-	subscribers map[T]map[Subscriber[T, D]]void
-	// 读写
-	lock sync.RWMutex
+	//  - 键：订阅的主题，类型：T
+	//  - 值：对应主题的全部订阅者集合，类型：*sync.Map 键： Subscriber 值： void
+	subscribers sync.Map
 }
 
 // Subscribe 订阅一个主题
@@ -77,16 +75,16 @@ type Broker[T comparable, D any] struct {
 //   - topic 要订阅的主题，不存在会创建
 //   - subscribers 订阅该主题的订阅者，不定长参数
 func (broker *Broker[T, D]) Subscribe(topic T, subscribers ...Subscriber[T, D]) {
-	// 写锁
-	broker.lock.Lock()
-	defer broker.lock.Unlock()
 	// 主题不存在则创建
-	if _, ok := broker.subscribers[topic]; !ok {
-		broker.subscribers[topic] = make(map[Subscriber[T, D]]void)
+	topicMap, ok := broker.subscribers.Load(topic)
+	if !ok {
+		topicMap = &sync.Map{}
+		broker.subscribers.Store(topic, topicMap)
 	}
 	// 加入主题列表
+	topicList := topicMap.(*sync.Map)
 	for _, subscriber := range subscribers {
-		broker.subscribers[topic][subscriber] = void{}
+		topicList.Store(subscriber, void{})
 	}
 }
 
@@ -95,27 +93,34 @@ func (broker *Broker[T, D]) Subscribe(topic T, subscribers ...Subscriber[T, D]) 
 //   - topic 要取消订阅的主题，不存在则不会做任何操作
 //   - subscriber 订阅该主题的订阅者
 func (broker *Broker[T, D]) UnSubscribe(topic T, subscriber Subscriber[T, D]) {
-	// 写锁
-	broker.lock.Lock()
-	defer broker.lock.Unlock()
 	// 移出订阅者列表
-	if subscribers, ok := broker.subscribers[topic]; ok {
-		delete(subscribers, subscriber)
+	topicMap, ok := broker.subscribers.Load(topic)
+	if ok {
+		topicMap.(*sync.Map).Delete(subscriber)
 	}
 }
 
 // 发布事件
 //
 //   - event 发布的事件对象
-func (broker *Broker[T, D]) publish(event *Event[T, D]) {
-	// 读锁
-	broker.lock.RLock()
-	defer broker.lock.RUnlock()
-	// 发布事件
-	if subscribers, ok := broker.subscribers[event.topic]; ok {
-		for subscriber := range subscribers {
-			subscriber.OnSubscribe(event)
-		}
+//   - async 是否异步发布
+func (broker *Broker[T, D]) publish(event *Event[T, D], async bool) {
+	// 获取主题对应的订阅者列表
+	topicMap, ok := broker.subscribers.Load(event.GetTopic())
+	if !ok {
+		return
+	}
+	// 执行事件发布
+	if async {
+		topicMap.(*sync.Map).Range(func(key, value any) bool {
+			go key.(Subscriber[T, D]).OnSubscribe(event)
+			return true
+		})
+	} else {
+		topicMap.(*sync.Map).Range(func(key, value any) bool {
+			key.(Subscriber[T, D]).OnSubscribe(event)
+			return true
+		})
 	}
 }
 
@@ -126,8 +131,7 @@ func (broker *Broker[T, D]) publish(event *Event[T, D]) {
 //   - D 处理的事件包含的内容类型
 func NewBroker[T comparable, D any]() *Broker[T, D] {
 	return &Broker[T, D]{
-		subscribers: make(map[T]map[Subscriber[T, D]]void),
-		lock:        sync.RWMutex{},
+		subscribers: sync.Map{},
 	}
 }
 
@@ -142,8 +146,11 @@ type BasePublisher[T comparable, D any] struct {
 }
 
 // Publish 发布事件
-func (publisher *BasePublisher[T, D]) Publish(event *Event[T, D]) {
-	publisher.broker.publish(event)
+//
+//   - event 发布的事件对象
+//   - async 是否异步发布
+func (publisher *BasePublisher[T, D]) Publish(event *Event[T, D], async bool) {
+	publisher.broker.publish(event, async)
 }
 
 // NewBasePublisher 创建一个基本发布者对象

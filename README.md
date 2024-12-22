@@ -4,6 +4,8 @@
 
 一个Go实现的**观察者模式**和**发布-订阅模式**的封装，可用于数据变化/事件传递的通知，将事件/数据变化和变化监听的操作解耦合。
 
+该软件包支持同步和异步的事件通知与处理，且都是线程安全的，可以在并发的场景下使用。
+
 ##  2，安装依赖
 
 在项目目录中执行下列命令安装依赖：
@@ -70,9 +72,9 @@ func main() {
 	// 3.观察主题
 	subject.Register(o1, o2)
 	// 4.数据变化时发出通知
-	subject.UpdateAndNotify("aaa")
+	subject.UpdateAndNotify("aaa", false)
 	time.Sleep(1 * time.Second)
-	subject.UpdateAndNotify("bbb")
+	subject.UpdateAndNotify("bbb", false)
 }
 ```
 
@@ -81,8 +83,11 @@ func main() {
 - `Register(observers ...Observer[T])` 添加观察该主题的观察者对象，参数为不定长参数，可一次添加多个观察者
 - `Remove(observer Observer[T])` 移除该主题的观察者对象
 - `Update(data T)` 更新主题的数据，但是不通知观察者
-- `Notify()` 将当前主题的数据传递并通知全部观察者
-- `UpdateAndNotify(data T)` 更新自身状态，并同时通知全部观察者
+- `Notify(async bool)` 将当前主题的数据传递并通知全部观察者，参数`async`指定为`true`时，则会异步通知，否则同步通知
+- `UpdateAndNotify(data T, async bool)` 更新自身状态，并同时通知全部观察者，参数：
+	- `data` 更新的数据
+	- `async` 是否异步通知
+
 
 ## 4，发布-订阅模式实现多维度事件处理
 
@@ -149,8 +154,8 @@ func main() {
 	broker.Subscribe("topic-1", s1)
 	broker.Subscribe("topic-2", s2)
 	// 5.发布者发布事件
-	publisher.Publish(gopher_notify.NewEvent(topicOne, "aaa"))
-	publisher.Publish(gopher_notify.NewEvent(topicTwo, "bbb"))
+	publisher.Publish(gopher_notify.NewEvent(topicOne, "aaa"), false)
+	publisher.Publish(gopher_notify.NewEvent(topicTwo, "bbb"), false)
 }
 ```
 
@@ -167,6 +172,19 @@ func main() {
 		- `topic` 要取消订阅的主题，若不存在则不会做任何操作
 		- `subscriber` 要取消订阅`topic`的订阅者
 - `NewBasePublisher`是基本发布者对象`BasePublisher`的构造函数，返回一个`BasePublisher`对象指针，其泛型的意义和`Event`中的一样，该函数传入一个`Broker`对象指定该发布者对应的事件总线对象，`BasePublisher`可被组合至自定义的结构体中进行扩展，此外它包含下列方法：
-  - `Publish(event *Event[T, D])` 发布事件到事件总线，发布后事件总线会通知订阅了该事件主题的全部订阅者，此时订阅者的`OnSubscribe`方法会被调用
+  - `Publish(event *Event[T, D], async bool)` 发布事件到事件总线，发布后事件总线会通知订阅了该事件主题的全部订阅者，此时订阅者的`OnSubscribe`方法会被调用其参数：
+  	- `event` 发布的事件对象
+  	- `async` 是否执行异步发布-订阅的事件操作
 
-上述无论是观察者模式还是发布-订阅模式，其实现都是线程安全的，支持并发的情况下调用。
+## 5，异步事件通知
+
+无论是`Subject`对象的`Notify`和`UpdateAndNotify`方法，还是`BasePublisher`的`Publish`方法，都带有一个`bool`类型的参数`async`，当该参数为`true`时，事件的通知和自定义事件的处理逻辑将在一个新的线程中执行，否则全部在当前线程执行。
+
+总体来说：
+
+- 在观察者模式中，`Subject`的`Notify`和`UpdateAndNotify`方法在进行通知时，实质上是调用了全部`Observer`对象的`OnUpdate`方法，实现状态传递以及观察者的自定义事件处理逻辑
+- 在发布-订阅模式中，`BasePublisher`的`Publish`方法实际上是调用了对应主题的全部`Subscriber`的`OnSubscribe`方法，实现事件传递以及订阅者的自定义事件处理逻辑
+
+也就是说，如果观察者`Observer`或者订阅者`Subscriber`中自定义处理事件的逻辑耗时较长，在同步的事件发布场景下，`Notify`、`UpdateAndNotify`以及`Publish`方法会被阻塞较长时间，如果观察者/订阅者较多，那么通知每个观察者/订阅者都会耗费较长时间，导致整个事件通知/发布操作非常耗时。
+
+在自定义事件处理逻辑较为复杂的情况下，或者在观察者/订阅者较多的情况下，可指定`async`参数为`true`，此时`Observer`对象的`OnUpdate`方法或`Subscriber`的`OnSubscribe`方法都会在一个新的线程中进行调用，不会使`Notify`、`UpdateAndNotify`以及`Publish`方法在当前线程阻塞。
