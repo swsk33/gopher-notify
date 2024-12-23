@@ -15,12 +15,13 @@ type MessageSubscriber struct {
 // 自定义接收到订阅事件的处理逻辑
 func (subscriber *MessageSubscriber) OnSubscribe(e *Event[string, string]) {
 	fmt.Printf("[%s]接收到事件，主题：%s，内容：%s\n", subscriber.name, e.GetTopic(), e.GetData())
+	time.Sleep(1 * time.Second)
 }
 
 // 测试发布-订阅功能
 func TestPublish_Subscribe(t *testing.T) {
 	// 1.创建事件总线
-	broker := NewBroker[string, string]()
+	broker := NewBroker[string, string](3)
 	// 2.创建发布者
 	publisher := NewBasePublisher[string, string](broker)
 	// 3.创建订阅者
@@ -30,7 +31,9 @@ func TestPublish_Subscribe(t *testing.T) {
 	broker.Subscribe("topic-1", s1)
 	broker.Subscribe("topic-2", s2)
 	// 5.发布者发布事件
-	publisher.Publish(NewEvent(topicOne, "aaa"), true)
-	publisher.Publish(NewEvent(topicTwo, "bbb"), true)
-	time.Sleep(100 * time.Millisecond)
+	publisher.Publish(NewEvent(topicOne, "aaa"))
+	publisher.Publish(NewEvent(topicTwo, "bbb"))
+	publisher.Publish(NewEvent(topicTwo, "ccc"))
+	time.Sleep(5 * time.Second)
+	broker.Close()
 }

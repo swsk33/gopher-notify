@@ -68,6 +68,48 @@ type Broker[T comparable, D any] struct {
 	//  - 键：订阅的主题，类型：T
 	//  - 值：对应主题的全部订阅者集合，类型：*sync.Map 键： Subscriber 值： void
 	subscribers sync.Map
+	// 消息队列
+	queue chan *Event[T, D]
+}
+
+// NewBroker 事件总线的构造函数
+//
+// 泛型：
+//   - T 处理的事件的主题类型
+//   - D 处理的事件包含的内容类型
+//
+// 参数：
+//   - buffer 消息队列通道缓冲区大小
+//     在订阅者处理消息逻辑耗时的情况下，可能导致发布操作被阻塞，可设定一定大小的通道缓冲区
+func NewBroker[T comparable, D any](buffer int) *Broker[T, D] {
+	// 创建一个Broker
+	broker := &Broker[T, D]{
+		subscribers: sync.Map{},
+		queue:       make(chan *Event[T, D], buffer),
+	}
+	// 在一个新的线程中准备接收事件并广播
+	go func() {
+		for e := range broker.queue {
+			broker.broadcast(e)
+		}
+	}()
+	return broker
+}
+
+// 广播事件给全部订阅者
+//
+//   - event 发布的事件对象
+func (broker *Broker[T, D]) broadcast(event *Event[T, D]) {
+	// 获取主题对应的订阅者列表
+	topicMap, ok := broker.subscribers.Load(event.GetTopic())
+	if !ok {
+		return
+	}
+	// 执行事件发布
+	topicMap.(*sync.Map).Range(func(key, value any) bool {
+		key.(Subscriber[T, D]).OnSubscribe(event)
+		return true
+	})
 }
 
 // Subscribe 订阅一个主题
@@ -100,39 +142,30 @@ func (broker *Broker[T, D]) UnSubscribe(topic T, subscriber Subscriber[T, D]) {
 	}
 }
 
-// 发布事件
+// RemoveTopic 移除某个主题，该主题全部的订阅者也会被全部取消订阅
 //
-//   - event 发布的事件对象
-//   - async 是否异步发布
-func (broker *Broker[T, D]) publish(event *Event[T, D], async bool) {
-	// 获取主题对应的订阅者列表
-	topicMap, ok := broker.subscribers.Load(event.GetTopic())
-	if !ok {
-		return
-	}
-	// 执行事件发布
-	if async {
-		topicMap.(*sync.Map).Range(func(key, value any) bool {
-			go key.(Subscriber[T, D]).OnSubscribe(event)
-			return true
-		})
-	} else {
-		topicMap.(*sync.Map).Range(func(key, value any) bool {
-			key.(Subscriber[T, D]).OnSubscribe(event)
-			return true
-		})
+//   - topic 要移除的主题
+func (broker *Broker[T, D]) RemoveTopic(topic T) {
+	topicMap, ok := broker.subscribers.Load(topic)
+	if ok {
+		topicMap.(*sync.Map).Clear()
+		broker.subscribers.Delete(topic)
 	}
 }
 
-// NewBroker 事件总线的构造函数
-//
-// 泛型：
-//   - T 处理的事件的主题类型
-//   - D 处理的事件包含的内容类型
-func NewBroker[T comparable, D any]() *Broker[T, D] {
-	return &Broker[T, D]{
-		subscribers: sync.Map{},
-	}
+// RemoveAll 移除全部主题及其订阅者
+func (broker *Broker[T, D]) RemoveAll() {
+	broker.subscribers.Range(func(key, value any) bool {
+		value.(*sync.Map).Clear()
+		return true
+	})
+	broker.subscribers.Clear()
+}
+
+// Close 关闭Broker的消息队列，释放资源，关闭后该Broker无法再被用于发布消息
+func (broker *Broker[T, D]) Close() {
+	broker.RemoveAll()
+	close(broker.queue)
 }
 
 // BasePublisher 基本发布者对象，可进行组合扩展
@@ -149,8 +182,8 @@ type BasePublisher[T comparable, D any] struct {
 //
 //   - event 发布的事件对象
 //   - async 是否异步发布
-func (publisher *BasePublisher[T, D]) Publish(event *Event[T, D], async bool) {
-	publisher.broker.publish(event, async)
+func (publisher *BasePublisher[T, D]) Publish(event *Event[T, D]) {
+	publisher.broker.queue <- event
 }
 
 // NewBasePublisher 创建一个基本发布者对象

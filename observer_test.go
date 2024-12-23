@@ -20,7 +20,7 @@ func (observer *TextObserver) OnUpdate(data string) {
 // 测试观察者-更新并通知
 func TestObserver_UpdateAndNotify(t *testing.T) {
 	// 1.创建主题
-	subject := NewSubject[string]()
+	subject := NewSubject[string](0)
 	// 2.创建观察者实例
 	o1, o2 := &TextObserver{"观察者1"}, &TextObserver{"观察者2"}
 	// 3.订阅主题
@@ -34,7 +34,7 @@ func TestObserver_UpdateAndNotify(t *testing.T) {
 // 测试观察者-手动通知
 func TestObserver_ManuallyNotify(t *testing.T) {
 	// 1.创建主题
-	subject := NewSubject[string]()
+	subject := NewSubject[string](0)
 	// 2.创建观察者实例
 	o1, o2 := &TextObserver{"观察者1"}, &TextObserver{"观察者2"}
 	// 3.订阅主题
@@ -50,7 +50,7 @@ func TestObserver_ManuallyNotify(t *testing.T) {
 // 测试观察者-更新并异步通知
 func TestObserver_UpdateAndNotifyAsync(t *testing.T) {
 	// 1.创建主题
-	subject := NewSubject[string]()
+	subject := NewSubject[string](0)
 	// 2.创建观察者实例
 	o1, o2 := &TextObserver{"观察者1"}, &TextObserver{"观察者2"}
 	// 3.订阅主题
@@ -64,7 +64,7 @@ func TestObserver_UpdateAndNotifyAsync(t *testing.T) {
 // 测试观察者-防抖
 func TestObserver_Debounce(t *testing.T) {
 	// 1.创建主题，设定防抖时间
-	subject := NewSubjectWithDebounce[string](1 * time.Second)
+	subject := NewSubject[string](1 * time.Second)
 	// 2.创建观察者实例
 	o1, o2 := &TextObserver{"观察者1"}, &TextObserver{"观察者2"}
 	// 3.订阅主题

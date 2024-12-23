@@ -40,21 +40,11 @@ type Subject[T any] struct {
 }
 
 // NewSubject 创建一个被观察主题
-func NewSubject[T any]() *Subject[T] {
-	return &Subject[T]{
-		observers:        sync.Map{},
-		debounceDuration: 0,
-		debounceFlag:     false,
-		lock:             sync.Mutex{},
-	}
-}
-
-// NewSubjectWithDebounce 创建一个被观察主题，带有防抖机制
 //
 //   - duration 防抖间隔，0表示不使用防抖
 //     若主题高频变化，就可能导致观察者被高频调用，出现资源浪费，可设定一个防抖间隔，在防抖时间间隔内出现的变化不会通知给观察者
 //     例如设为 1*time.Second 观察者会在防抖时间1秒后收到通知，即使在1秒内主题多次更新状态
-func NewSubjectWithDebounce[T any](duration time.Duration) *Subject[T] {
+func NewSubject[T any](duration time.Duration) *Subject[T] {
 	return &Subject[T]{
 		observers:        sync.Map{},
 		debounceDuration: duration,
@@ -96,6 +86,11 @@ func (subject *Subject[T]) Register(observers ...Observer[T]) {
 func (subject *Subject[T]) Remove(observer Observer[T]) {
 	// 执行移除
 	subject.observers.Delete(observer)
+}
+
+// RemoveAll 移除全部观察者
+func (subject *Subject[T]) RemoveAll() {
+	subject.observers.Clear()
 }
 
 // Update 更新数据，但是不通知观察者
