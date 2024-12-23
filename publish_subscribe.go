@@ -17,16 +17,8 @@ type Event[T comparable, D any] struct {
 	topic T
 	// 内容
 	data D
-}
-
-// GetTopic 获取事件的主题
-func (e *Event[T, D]) GetTopic() T {
-	return e.topic
-}
-
-// GetData 获取事件的内容
-func (e *Event[T, D]) GetData() D {
-	return e.data
+	// 是否异步调用
+	async bool
 }
 
 // NewEvent 事件对象构造函数
@@ -42,7 +34,18 @@ func NewEvent[T comparable, D any](topic T, data D) *Event[T, D] {
 	return &Event[T, D]{
 		topic: topic,
 		data:  data,
+		async: false,
 	}
+}
+
+// GetTopic 获取事件的主题
+func (e *Event[T, D]) GetTopic() T {
+	return e.topic
+}
+
+// GetData 获取事件的内容
+func (e *Event[T, D]) GetData() D {
+	return e.data
 }
 
 // Subscriber 订阅者接口
@@ -106,10 +109,17 @@ func (broker *Broker[T, D]) broadcast(event *Event[T, D]) {
 		return
 	}
 	// 执行事件发布
-	topicMap.(*sync.Map).Range(func(key, value any) bool {
-		key.(Subscriber[T, D]).OnSubscribe(event)
-		return true
-	})
+	if event.async {
+		topicMap.(*sync.Map).Range(func(key, value any) bool {
+			go key.(Subscriber[T, D]).OnSubscribe(event)
+			return true
+		})
+	} else {
+		topicMap.(*sync.Map).Range(func(key, value any) bool {
+			key.(Subscriber[T, D]).OnSubscribe(event)
+			return true
+		})
+	}
 }
 
 // Subscribe 订阅一个主题
@@ -178,14 +188,6 @@ type BasePublisher[T comparable, D any] struct {
 	broker *Broker[T, D]
 }
 
-// Publish 发布事件
-//
-//   - event 发布的事件对象
-//   - async 是否异步发布
-func (publisher *BasePublisher[T, D]) Publish(event *Event[T, D]) {
-	publisher.broker.queue <- event
-}
-
 // NewBasePublisher 创建一个基本发布者对象
 //
 // 泛型：
@@ -198,4 +200,13 @@ func NewBasePublisher[T comparable, D any](broker *Broker[T, D]) *BasePublisher[
 	return &BasePublisher[T, D]{
 		broker: broker,
 	}
+}
+
+// Publish 发布事件
+//
+//   - event 发布的事件对象
+//   - async 是否异步通知订阅者
+func (publisher *BasePublisher[T, D]) Publish(event *Event[T, D], async bool) {
+	event.async = async
+	publisher.broker.queue <- event
 }
