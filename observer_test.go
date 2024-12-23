@@ -60,3 +60,19 @@ func TestObserver_UpdateAndNotifyAsync(t *testing.T) {
 	subject.UpdateAndNotify("bbb", true)
 	time.Sleep(1 * time.Second)
 }
+
+// 测试观察者-防抖
+func TestObserver_Debounce(t *testing.T) {
+	// 1.创建主题，设定防抖时间
+	subject := NewSubjectWithDebounce[string](1 * time.Second)
+	// 2.创建观察者实例
+	o1, o2 := &TextObserver{"观察者1"}, &TextObserver{"观察者2"}
+	// 3.订阅主题
+	subject.Register(o1, o2)
+	// 4.数据频繁变化时，每隔1s才会发出通知
+	for i := 1; i <= 20; i++ {
+		subject.UpdateAndNotify(fmt.Sprintf("%d", i), false)
+		time.Sleep(200 * time.Millisecond)
+	}
+	time.Sleep(5 * time.Second)
+}
