@@ -207,6 +207,10 @@ func NewBasePublisher[T comparable, D any](broker *Broker[T, D]) *BasePublisher[
 //   - event 发布的事件对象
 //   - async 是否异步通知订阅者
 func (publisher *BasePublisher[T, D]) Publish(event *Event[T, D], async bool) {
+	// 捕获可能出现的panic
+	defer func() {
+		_ = recover()
+	}()
 	event.async = async
 	publisher.broker.queue <- event
 }

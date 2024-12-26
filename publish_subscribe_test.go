@@ -31,9 +31,12 @@ func TestPublish_Subscribe(t *testing.T) {
 	broker.Subscribe("topic-1", s1)
 	broker.Subscribe("topic-2", s2)
 	// 5.发布者发布事件
-	publisher.Publish(NewEvent(topicOne, "aaa"))
-	publisher.Publish(NewEvent(topicTwo, "bbb"))
-	publisher.Publish(NewEvent(topicTwo, "ccc"))
+	publisher.Publish(NewEvent(topicOne, "aaa"), false)
+	publisher.Publish(NewEvent(topicTwo, "bbb"), false)
+	publisher.Publish(NewEvent(topicTwo, "ccc"), false)
 	time.Sleep(5 * time.Second)
 	broker.Close()
+	// 测试宕机捕获
+	publisher.Publish(NewEvent(topicOne, "aaa"), false)
+	time.Sleep(1 * time.Second)
 }
